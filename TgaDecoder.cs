@@ -38,7 +38,7 @@ namespace TgaDecoderTest
                 this.bitPerPixel = image[16];
                 this.descriptor = image[17];
                 this.colorData = new byte[image.Length - TgaHeaderSize];
-                image.CopyTo(this.colorData, TgaHeaderSize);
+                Array.Copy(image, TgaHeaderSize, this.colorData, 0, this.colorData.Length);
             }
 
             public int Width
@@ -55,7 +55,33 @@ namespace TgaDecoderTest
             {
                 if (colorMapType == 0)
                 {
-                    return 0;
+                    if (this.bitPerPixel == 32)
+                    {
+                        int bp = 4;
+                        int yy = ((this.descriptor & 0x20) == 0 ? (this.imageHeight - 1 - y) : y) * (this.imageWidth * bp);
+                        int xx = ((this.descriptor & 0x10) == 0 ? x : (this.imageWidth - 1 - x)) * bp;
+                        int index = yy + xx;
+                        int b = this.colorData[index + 0] & 0xFF;
+                        int g = this.colorData[index + 1] & 0xFF;
+                        int r = this.colorData[index + 2] & 0xFF;
+                        int a = this.colorData[index + 3] & 0xFF;
+                        return (a << 24) | (r << 16) | (g << 8) | b;
+                    }
+                    else if (this.bitPerPixel == 24)
+                    {
+                        int bp = 3;
+                        int yy = ((this.descriptor & 0x20) == 0 ? (this.imageHeight - 1 - y) : y) * (this.imageWidth * bp);
+                        int xx = ((this.descriptor & 0x10) == 0 ? x : (this.imageWidth - 1 - x)) * bp;
+                        int index = yy + xx;
+                        int b = this.colorData[index + 0] & 0xFF;
+                        int g = this.colorData[index + 1] & 0xFF;
+                        int r = this.colorData[index + 2] & 0xFF;
+                        return (r << 16) | (g << 8) | b;
+                    }
+                    else
+                    {
+                        return 0;
+                    }
                 }
                 else
                 {
@@ -87,8 +113,9 @@ namespace TgaDecoderTest
                     return decode(buffer);
                 }
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                Console.WriteLine(e);
                 return null;
             }
         }
@@ -98,7 +125,13 @@ namespace TgaDecoderTest
             TgaData tga = new TgaData(image);
 
             Bitmap bitmap = new Bitmap(tga.Width, tga.Height);
-            //bitmap.SetPixel();
+            for (int y = 0; y < tga.Height; ++y)
+            {
+                for (int x = 0; x < tga.Width; ++x)
+                {
+                    bitmap.SetPixel(x, y, Color.FromArgb(tga.GetPixel(x, y)));
+                }
+            }
             return bitmap;
         }
 

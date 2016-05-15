@@ -39,6 +39,9 @@ namespace TgaDecoderTest
                 this.descriptor = image[17];
                 this.colorData = new byte[image.Length - TgaHeaderSize];
                 Array.Copy(image, TgaHeaderSize, this.colorData, 0, this.colorData.Length);
+                // Index color RLE or Full color RLE or Gray RLE
+                if (this.imageType == 9 || this.imageType == 10 || this.imageType == 11)
+                    this.colorData = this.decodeRLE();
             }
 
             public int Width
@@ -55,49 +58,88 @@ namespace TgaDecoderTest
             {
                 if (colorMapType == 0)
                 {
-                    if (this.bitPerPixel == 32)
+                    switch (this.imageType)
                     {
-                        int bp = 4;
-                        int yy = ((this.descriptor & 0x20) == 0 ? (this.imageHeight - 1 - y) : y) * (this.imageWidth * bp);
-                        int xx = ((this.descriptor & 0x10) == 0 ? x : (this.imageWidth - 1 - x)) * bp;
-                        int index = yy + xx;
-                        int b = this.colorData[index + 0] & 0xFF;
-                        int g = this.colorData[index + 1] & 0xFF;
-                        int r = this.colorData[index + 2] & 0xFF;
-                        int a = this.colorData[index + 3] & 0xFF;
-                        return (a << 24) | (r << 16) | (g << 8) | b;
+                        // Index color
+                        case 1:
+                        case 9:
+                            // not implemented
+                            return 0;
+
+                        // Full color
+                        case 2:
+                        case 10:
+                            int elementCount = this.bitPerPixel / 8;
+                            int dy = ((this.descriptor & 0x20) == 0 ? (this.imageHeight - 1 - y) : y) * (this.imageWidth * elementCount);
+                            int dx = ((this.descriptor & 0x10) == 0 ? x : (this.imageWidth - 1 - x)) * elementCount;
+                            int index = dy + dx;
+
+                            int b = this.colorData[index + 0] & 0xFF;
+                            int g = this.colorData[index + 1] & 0xFF;
+                            int r = this.colorData[index + 2] & 0xFF;
+
+                            if (elementCount == 4) // this.bitPerPixel == 32
+                            {
+                                int a = this.colorData[index + 3] & 0xFF;
+                                return (a << 24) | (r << 16) | (g << 8) | b;
+                            }
+                            else if (elementCount == 3) // this.bitPerPixel == 24
+                            {
+                                return (r << 16) | (g << 8) | b;
+                            }
+                            break;
+                        
+                        // Gray
+                        case 3:
+                        case 11:
+                            // not implemented
+                            return 0;
                     }
-                    else if (this.bitPerPixel == 24)
-                    {
-                        int bp = 3;
-                        int yy = ((this.descriptor & 0x20) == 0 ? (this.imageHeight - 1 - y) : y) * (this.imageWidth * bp);
-                        int xx = ((this.descriptor & 0x10) == 0 ? x : (this.imageWidth - 1 - x)) * bp;
-                        int index = yy + xx;
-                        int b = this.colorData[index + 0] & 0xFF;
-                        int g = this.colorData[index + 1] & 0xFF;
-                        int r = this.colorData[index + 2] & 0xFF;
-                        return (r << 16) | (g << 8) | b;
-                    }
-                    else
-                    {
-                        return 0;
-                    }
+                    return 0;
                 }
                 else
                 {
-                    int colormapDataSize = this.bitPerPixel / 8 * this.colorMapLength;
-                    int imageDataOffset = colormapDataSize;
-
-                    int offset = (this.colorData[imageDataOffset] & 0xFF) - this.colorMapIndex;
-
-                    int index = 4 * offset;
-                    int b = this.colorData[index + 0] & 0xFF;
-                    int g = this.colorData[index + 1] & 0xFF;
-                    int r = this.colorData[index + 2] & 0xFF;
-                    int a = this.colorData[index + 3] & 0xFF;
-
-                    return (a << 24) | (r << 16) | (g << 8) | b;
+                    // not implemented
+                    return 0;
                 }
+            }
+
+            protected byte[] decodeRLE()
+            {
+                int elementCount = this.bitPerPixel / 8;
+                byte[] elements = new byte[elementCount];
+                int decodeBufferLength = elementCount * this.imageWidth * this.imageHeight;
+                byte[] decodeBuffer = new byte[decodeBufferLength];
+                int decoded = 0;
+                int offset = 0;
+                while (decoded < decodeBufferLength)
+                {
+                    int packet = this.colorData[offset++] & 0xFF;
+                    if ((packet & 0x80) != 0)
+                    {
+                        for (int i = 0; i < elementCount; i++)
+                        {
+                            elements[i] = this.colorData[offset++];
+                        }
+                        int count = (packet & 0x7F) + 1;
+                        for (int i = 0; i < count; i++)
+                        {
+                            for (int j = 0; j < elementCount; j++)
+                            {
+                                decodeBuffer[decoded++] = elements[j];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        int count = (packet + 1) * elementCount;
+                        for (int i = 0; i < count; i++)
+                        {
+                            decodeBuffer[decoded++] = this.colorData[offset++];
+                        }
+                    }
+                }
+                return decodeBuffer;
             }
         }
 
@@ -113,11 +155,15 @@ namespace TgaDecoderTest
                     return decode(buffer);
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                Console.WriteLine(e);
                 return null;
             }
+        }
+
+        public static Bitmap FromBinary(byte[] image)
+        {
+            return decode(image);
         }
 
         protected static Bitmap decode(byte[] image)

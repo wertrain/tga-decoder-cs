@@ -10,11 +10,13 @@ namespace TgaDecoderTest
     {
         static void Main(string[] args)
         {
-            Bitmap bmp = TgaDecoder.FromFile("bakeneko32bitLU.tga");
-            bmp.Save("bakeneko32bitLU.bmp");
-
-            bmp = TgaDecoder.FromFile("bakeneko32bitLD.tga");
-            bmp.Save("bakeneko32bitLD.bmp");
+            string path = @"../../SampleData/";
+            string [] samples = { @"bakeneko32bitLU", @"bakeneko32bitLD", @"bakeneko32bitLU_RLE", @"bakeneko32bitLD_RLE" };
+            for (int i = 0; i < samples.Length; ++i)
+            {
+                Bitmap bmp = TgaDecoder.FromFile(path + samples[i] + ".tga");
+                bmp.Save(path + samples[i] + ".bmp");
+            }
         }
     }
 }
